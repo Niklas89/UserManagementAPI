@@ -1,0 +1,28 @@
+@baseUrl = http://localhost:5080
+
+### List
+GET {{baseUrl}}/api/users
+
+### Create; use returned id in subsequent requests
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com"}
+
+### Read
+GET {{baseUrl}}/api/users/1
+
+### Update
+PUT {{baseUrl}}/api/users/1
+Content-Type: application/json
+
+{"firstName":"Ada","lastName":"Byron","email":"ada.byron@example.com"}
+
+### Delete
+DELETE {{baseUrl}}/api/users/1
+
+### Invalid input: 400
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{"firstName":"","lastName":"Example","email":"invalid"}
