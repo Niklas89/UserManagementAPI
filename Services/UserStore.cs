@@ -6,10 +6,15 @@ public sealed class UserStore
 {
     private readonly object gate = new();
     private readonly Dictionary<int, User> users = new();
+    private readonly Dictionary<string, int> emailOwners = new(StringComparer.OrdinalIgnoreCase);
     private int nextId = 1;
     public User[] GetAll()
     {
-        lock (gate) return users.Values.OrderBy(user => user.Id).ToArray();
+        User[] snapshot;
+        lock (gate) snapshot = users.Values.ToArray();
+        // Records are immutable, so sorting the snapshot does not need the store lock.
+        Array.Sort(snapshot, (left, right) => left.Id.CompareTo(right.Id));
+        return snapshot;
     }
     public User? Get(int id)
     {
@@ -22,6 +27,7 @@ public sealed class UserStore
             if (EmailExists(request.Email)) return null;
             var user = ToUser(nextId++, request);
             users.Add(user.Id, user);
+            emailOwners.Add(user.Email, user.Id);
             return user;
         }
     }
@@ -29,19 +35,26 @@ public sealed class UserStore
     {
         lock (gate)
         {
-            if (!users.ContainsKey(id)) return UpdateResult.NotFound;
+            if (!users.TryGetValue(id, out var previous)) return UpdateResult.NotFound;
             if (EmailExists(request.Email, id)) return UpdateResult.DuplicateEmail;
-            users[id] = ToUser(id, request);
+            var updated = ToUser(id, request);
+            emailOwners.Remove(previous.Email);
+            emailOwners.Add(updated.Email, id);
+            users[id] = updated;
             return UpdateResult.Updated;
         }
     }
     public bool Delete(int id)
     {
-        lock (gate) return users.Remove(id);
+        lock (gate)
+        {
+            if (!users.Remove(id, out var removed)) return false;
+            emailOwners.Remove(removed.Email);
+            return true;
+        }
     }
     private bool EmailExists(string email, int? exceptId = null) =>
-        users.Values.Any(user => user.Id != exceptId &&
-            string.Equals(user.Email, email.Trim(), StringComparison.OrdinalIgnoreCase));
+        emailOwners.TryGetValue(email.Trim(), out var ownerId) && ownerId != exceptId;
     private static User ToUser(int id, UserRequest request) =>
         new(id, request.FirstName.Trim(), request.LastName.Trim(), request.Email.Trim());
 }

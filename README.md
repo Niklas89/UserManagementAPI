@@ -240,3 +240,40 @@ After adding the requirement for at least one Unicode letter in each name, the b
 
 Restart the API after changing the code to load the new validation rules. In the running terminal press Ctrl+C, then rerun `dotnet run --no-launch-profile --urls http://localhost:5080`. The in-memory records will be cleared.
 
+
+## Debugging and reliability improvements
+
+Review findings and changes:
+
+- Input validation and missing-user handling were already implemented. Invalid POST/PUT bodies return 400; missing records return 404. These behaviors are retained and covered by HTTP tests. There is no database in this version, so no database lookup failure was reproduced.
+- Exception handling already used ASP.NET Core's built-in handler. It is now implemented explicitly in `Middleware/ApiExceptionMiddleware.cs` with a centralized try-catch around request execution. Unexpected exceptions are logged with a trace ID and return a generic 500 problem-details response without exposing exception messages or stack traces. Client cancellation is handled separately. If the response has already started, the exception is rethrown because the response cannot safely be rewritten; the server handles the failed connection.
+- GET `/api/users` previously sorted while holding the shared store lock. It now copies an immutable-record snapshot under the lock and sorts outside it, reducing time that other requests are blocked. Results remain ordered by ID. Copying still takes O(n), sorting takes O(n log n), and the endpoint still returns the full collection; this is not a measured throughput claim or a pagination implementation.
+- Duplicate-email checks previously scanned all users. A case-insensitive dictionary now provides average O(1) email lookup. Creation, updates, and deletion maintain the index under the same lock. Changing or deleting an email releases it for reuse, and conflicting updates retain the previous record and index entry.
+
+### Unexpected-error response
+
+A caught unexpected exception returns **500 Internal Server Error** with `Content-Type: application/problem+json`, for example:
+
+```json
+{
+  "title": "An unexpected error occurred.",
+  "status": 500,
+  "detail": "Please try again later.",
+  "traceId": "request-specific-trace-id"
+}
+```
+
+Use the trace ID to find the corresponding server log entry. This is separate from expected 400 validation errors, 404 missing records, and 409 duplicate emails. The regression harness injects an exception directly into the middleware; no public crash endpoint is added.
+
+### Run the targeted regression checks
+
+The regression harness is a console project using the shared ASP.NET Core framework, with no external test packages:
+
+```powershell
+dotnet run --project tests/RegressionTests/RegressionTests.csproj
+```
+
+It exits with an error if an assertion fails. It checks email-index consistency, missing records, concurrent duplicate creation, concurrent list requests, 500 response shape, omission of exception details, continued request processing after an exception, and client cancellation. The existing `scripts/Test-Api.ps1` checks the running API over HTTP.
+
+Build verification: zero warnings and errors. All 13 targeted regression checks passed.
+The updated API also passed all 51 HTTP checks on port 5081, plus cleanup requests.
