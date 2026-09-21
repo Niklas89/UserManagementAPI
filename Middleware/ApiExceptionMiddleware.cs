@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace UserManagementAPI.Middleware;
 
-public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExceptionMiddleware> logger)
+public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExceptionMiddleware> logger, RequestAudit audit)
 {
     public async Task InvokeAsync(HttpContext context)
     {
@@ -17,6 +17,7 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
         }
         catch (Exception exception)
         {
+            audit.Start(context);
             logger.LogError(exception, "Unhandled request error. TraceId: {TraceId}", context.TraceIdentifier);
             // A response already being streamed cannot safely be replaced with JSON.
             if (context.Response.HasStarted) throw;
@@ -32,6 +33,11 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             problem.Extensions["traceId"] = context.TraceIdentifier;
             await context.Response.WriteAsJsonAsync(problem, options: null,
                 contentType: "application/problem+json", cancellationToken: context.RequestAborted);
+        }
+        finally
+        {
+            // Capture the final status after error handling, including short-circuited 401s.
+            audit.Complete(context);
         }
     }
 }

@@ -36,6 +36,7 @@ Parallel.For(0, 100, i =>
 Check(concurrent.GetAll().Length == 101, "Concurrent list and create preserve users and sorted snapshots");
 
 var logger = NullLogger<ApiExceptionMiddleware>.Instance;
+var audit = new RequestAudit(NullLogger<RequestLoggingMiddleware>.Instance);
 var context = new DefaultHttpContext();
 context.TraceIdentifier = "test-trace";
 context.Response.Body = new MemoryStream();
@@ -44,7 +45,7 @@ var middleware = new ApiExceptionMiddleware(async ctx =>
 {
     if (++calls == 1) throw new InvalidOperationException("SECRET exception detail");
     await ctx.Response.WriteAsync("healthy");
-}, logger);
+}, logger, audit);
 await middleware.InvokeAsync(context);
 context.Response.Body.Position = 0;
 var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
@@ -57,6 +58,7 @@ await middleware.InvokeAsync(nextContext);
 Check(nextContext.Response.StatusCode == 200 && nextContext.Response.Body.Length > 0, "Requests continue after a handled exception");
 var canceledContext = new DefaultHttpContext();
 canceledContext.RequestAborted = new CancellationToken(true);
-await new ApiExceptionMiddleware(_ => throw new OperationCanceledException(), logger).InvokeAsync(canceledContext);
+await new ApiExceptionMiddleware(_ => throw new OperationCanceledException(), logger, audit).InvokeAsync(canceledContext);
 Check(canceledContext.Response.StatusCode != 500, "Client cancellation is not reported as a server failure");
 Console.WriteLine("All regression checks passed.");
+await MiddlewareChecks.Run();

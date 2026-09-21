@@ -1,7 +1,9 @@
-param([string]$BaseUrl = 'http://localhost:5080')
+param([string]$BaseUrl = 'http://localhost:5080', [string]$Token = $env:Authentication__Token)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 $client = [System.Net.Http.HttpClient]::new()
+if ([string]::IsNullOrWhiteSpace($Token)) { throw 'Set Authentication__Token or pass -Token with the configured bearer token.' }
+$client.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $Token)
 $createdIds = [System.Collections.Generic.List[int]]::new()
 $count = 0
 function Request($method, $path, $body, $expected) {

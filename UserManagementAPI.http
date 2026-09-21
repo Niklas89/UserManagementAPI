@@ -1,28 +1,36 @@
 @baseUrl = http://localhost:5080
+@token = REPLACE_WITH_YOUR_CONFIGURED_TOKEN
 
 ### List
 GET {{baseUrl}}/api/users
+Authorization: Bearer {{token}}
 
 ### Create; use returned id in subsequent requests
 POST {{baseUrl}}/api/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"firstName":"Ada","lastName":"Lovelace","email":"ada@example.com"}
 
 ### Read
 GET {{baseUrl}}/api/users/1
+Authorization: Bearer {{token}}
 
 ### Update
 PUT {{baseUrl}}/api/users/1
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"firstName":"Ada","lastName":"Byron","email":"ada.byron@example.com"}
 
 ### Delete
 DELETE {{baseUrl}}/api/users/1
+Authorization: Bearer {{token}}
 
 ### Invalid input: 400
 POST {{baseUrl}}/api/users
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {"firstName":"","lastName":"Example","email":"invalid"}
+
